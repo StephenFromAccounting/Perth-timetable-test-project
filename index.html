@@ -4,46 +4,170 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Perth Transit Boards</title>
+<meta name="description" content="Free platform-style train and bus departure signs for Perth that run in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-:root{box-sizing:border-box;--wall:#1e2024;--face:#000;--led:#f2f2f2;--flash:#ffa31a;--ink:#d9d4cb}
+:root{box-sizing:border-box;--wall:#1e2024;--panel:#26292e;--face:#000;--led:#f2f2f2;--flash:#ffa31a;--ink:#d9d4cb;--soft:#a8a59e;--line:#3a3d43;--paper:#dcdfd9;--paperink:#1f2421}
 *,*::before,*::after{box-sizing:inherit}
-body{margin:0;min-height:100vh;background:var(--wall);color:var(--ink);font-family:"Source Sans 3",system-ui,sans-serif;
-  display:flex;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 32px) 16px calc(env(safe-area-inset-bottom,0px) + 32px)}
-main{width:min(760px,100%)}
-h1{font-family:"Pixelify Sans",monospace;font-weight:600;color:var(--led);font-size:clamp(28px,7vw,44px);margin:0 0 6px;text-shadow:.08em .08em 0 #3a3a3a}
-p.lead{margin:0 0 28px;font-size:17px;line-height:1.55;max-width:60ch}
-.cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
-a.card{display:block;text-decoration:none;color:inherit;background:#161616;border-radius:8px;padding:12px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.06)}
-.face{background:var(--face);padding:16px;font-family:"Pixelify Sans",monospace;color:var(--led)}
-.bar{background:var(--led);color:#000;padding:4px 8px;font-size:15px;margin-bottom:8px}
-.big{font-size:28px;font-weight:600}
-.face.bus{background:#dcdfd9;color:#1f2421;font-family:"Source Sans 3",sans-serif}
-.face.bus .bar{background:#2a2f2c;color:#f1f2ee}
-a.card:hover .face,a.card:focus-visible .face{outline:2px solid var(--flash)}
-a.card:focus-visible{outline:3px solid var(--flash);outline-offset:3px}
-.desc{padding:12px 4px 2px;font-size:15px;line-height:1.5}
-.small{margin-top:28px;font-size:13px;opacity:.7;line-height:1.6}
-.small a{color:inherit}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--wall);color:var(--ink);font-family:"Source Sans 3",system-ui,sans-serif;font-size:17px;line-height:1.6;
+  padding:calc(env(safe-area-inset-top,0px) + 28px) 16px calc(env(safe-area-inset-bottom,0px) + 40px)}
+main{width:min(820px,100%);margin:0 auto}
+h1,h2{font-family:"Pixelify Sans",monospace;font-weight:600;color:var(--led);text-shadow:.08em .08em 0 #3a3a3a;line-height:1.15}
+h1{font-size:clamp(32px,8vw,52px);margin:0 0 10px}
+h2{font-size:clamp(22px,5vw,30px);margin:0 0 12px}
+h3{font-size:18px;margin:18px 0 6px;color:var(--led)}
+p{margin:0 0 14px;max-width:65ch}
+a{color:var(--flash)}
+a:focus-visible,.btn:focus-visible{outline:3px solid var(--flash);outline-offset:3px}
+section{padding:34px 0;border-top:2px dashed var(--line)}
+.lead{font-size:clamp(18px,4.2vw,21px)}
+.sub{color:var(--soft)}
+.hero-sign{background:#161616;border-radius:8px;padding:12px;margin:22px 0 18px;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+.hero-face{background:var(--face);padding:14px 16px;font-family:"Pixelify Sans",monospace;color:var(--led);text-shadow:.12em .12em 0 #3a3a3a}
+.hero-face .bar{background:var(--led);color:#000;text-shadow:none;padding:3px 8px;font-size:15px;margin-bottom:6px}
+.hero-face .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.hero-face .dest{font-size:clamp(26px,7vw,40px);font-weight:600}
+.hero-face .mins{font-size:clamp(32px,9vw,52px);font-weight:600;white-space:nowrap}
+.hero-face .mins small{font-size:.35em;margin-left:.2em}
+.hero-face .then{font-size:15px;opacity:.85;border-top:2px dashed #4a4a4a;margin-top:8px;padding-top:6px}
+.blink{animation:flash 1.3s step-end infinite}
+@keyframes flash{50%{color:var(--flash)}}
+@media (prefers-reduced-motion:reduce){.blink{animation:none}}
+.cta{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));margin-top:8px}
+.btn{display:block;text-decoration:none;text-align:center;font-weight:700;font-size:18px;padding:14px 16px;border-radius:6px;background:var(--led);color:#111}
+.btn.alt{background:var(--paper);color:var(--paperink)}
+.btn small{display:block;font-weight:400;font-size:14px;opacity:.75}
+.cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.card{background:var(--panel);border-radius:8px;padding:16px 18px}
+.card h3{margin-top:0}
+.card ul{margin:0;padding-left:1.1em}
+.card li{margin:4px 0}
+.who{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))}
+.who div{background:var(--panel);border-radius:8px;padding:14px 16px}
+.who b.t{display:block;color:var(--led);font-size:17px}
+ol.steps{padding-left:1.2em;margin:0}
+ol.steps li{margin:8px 0}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88em;background:#121316;padding:1px 6px;border-radius:4px}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:480px;font-size:15px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--led);font-weight:600}
+.fine{font-size:14px;color:var(--soft)}
+footer{border-top:2px dashed var(--line);padding-top:22px;font-size:14px;color:var(--soft)}
 </style>
 </head>
 <body>
 <main>
+
   <h1>Perth Transit Boards</h1>
-  <p class="lead">Platform-style departure signs for Perth trains and buses, built from the free public transport timetable for Western Australia. Pick a station or type a bus stop number and the sign counts down on your device's own clock.</p>
-  <div class="cards">
-    <a class="card" href="train-board.html">
-      <div class="face"><div class="bar">Platform 2</div><div class="big">Train board</div></div>
-      <div class="desc">Any train station. Two platform signs, all lines merged, next three services, scrolling stop list, flashing when a train is due.</div>
-    </a>
-    <a class="card" href="bus-board.html">
-      <div class="face bus"><div class="bar">Stop 12808</div><div class="big">Bus stop board</div></div>
-      <div class="desc">Type the number from the green bus stop sign. Every route at that stop, next six departures, e-paper style.</div>
-    </a>
+  <p class="lead">Free train platform signs and bus stop boards for Perth, running right in your browser. Pick a station, type a stop number, and watch the next service count down on your own phone, tablet or spare screen.</p>
+
+  <div class="hero-sign" aria-hidden="true">
+    <div class="hero-face">
+      <div class="bar">Platform 2&ensp;Thornlie-Cockburn Line</div>
+      <div class="row"><span class="dest blink">Cockburn Central</span><span class="mins blink">1<small>min</small></span></div>
+      <div class="then">Then: Byford 19:23 &nbsp; 9 min</div>
+    </div>
   </div>
-  <p class="small">The boards load the timetable automatically if <code>google_transit.zip</code> sits next to this page. Otherwise, <a href="https://www.transperth.wa.gov.au/TimetablePDFs/GoogleTransit/Production/google_transit.zip" target="_blank" rel="noopener">download the timetable</a> and tap Import on either board. Times are scheduled, not live.<br>Timetable data is available free of charge from <a href="https://www.transperth.wa.gov.au" target="_blank" rel="noopener">www.transperth.wa.gov.au</a>. This is an independent project and is not endorsed by the data provider.</p>
+
+  <div class="cta">
+    <a class="btn" href="train-board.html">Open the train board<small>Any station, every line</small></a>
+    <a class="btn alt" href="bus-board.html">Open the bus stop board<small>Type a stop number</small></a>
+  </div>
+
+  <section>
+    <h2>Who it's for</h2>
+    <p>No app, no account, no ads. If any of these sound like you, you're in the right place.</p>
+    <div class="who">
+      <div><b class="t">Rail fans</b>A platform sign for any station on the network, flashing when the train is due, just like the real thing.</div>
+      <div><b class="t">Bus spotters</b>Every route at your stop in one list, in the style of the new city e-paper signs.</div>
+      <div><b class="t">Tinkerers</b>Turn an old phone or tablet into a desk display. Each board is one HTML file: read it, change it, make it yours.</div>
+      <div><b class="t">Just bored?</b>Open the train board, tap <b>Demo</b> and watch five minutes of trains come and go between Perth and Cannington.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What's inside</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Train board</h3>
+        <ul>
+          <li>Any station, picked from a list grouped by line (Armadale, Thornlie-Cockburn, Mandurah, Yanchep and more) or A to Z.</li>
+          <li>Two signs side by side, one per platform, with every line through the station merged in time order.</li>
+          <li>The next train large, the following two under "Then:".</li>
+          <li>A scrolling "Stops at" line listing every station to the end of the line.</li>
+          <li>Minutes round up like the real boards. At 1 minute the sign flashes, and the train stays up until 25 seconds after its scheduled time.</li>
+          <li>Demo mode, full screen, and text that sizes itself to fill the screen.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Bus stop board</h3>
+        <ul>
+          <li>Type the stop number shown at the bus stop, for example <code>12808</code>.</li>
+          <li>The next six departures from every route at that stop: route, destination and minutes.</li>
+          <li>"Now", "5 mins", or a clock time for buses more than 30 minutes away.</li>
+          <li>Full screen and auto-sizing text, so it reads well on any screen.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Try it in 30 seconds</h2>
+    <ol class="steps">
+      <li>Open the <a href="train-board.html">train board</a> or the <a href="bus-board.html">bus stop board</a>.</li>
+      <li>The timetable loads by itself. The first visit takes a moment while it reads the file (about 26 MB), then it's saved on your device.</li>
+      <li>Train board: tap <b>Pick station</b>. Bus board: type a stop number and tap <b>Show stop</b>.</li>
+      <li>Tap <b>Full screen</b>, turn your phone sideways, and leave it running.</li>
+    </ol>
+    <p class="sub" style="margin-top:12px">If the timetable doesn't load (for example when a board is opened as a downloaded file), tap <b>Download timetable</b>, then <b>Import</b> and choose the file.</p>
+  </section>
+
+  <section>
+    <h2>Put it on a spare screen</h2>
+    <p>Got an old phone in a drawer? Prop it up by the door, open a board, tap <b>Full screen</b> and it becomes a departure sign. The screen stays awake while it runs, and the countdown follows the device's own clock, accurate to the second.</p>
+    <p>In Chrome on Android, the menu has <b>Add to Home screen</b>, so a board opens like an app.</p>
+  </section>
+
+  <section>
+    <h2>Make it yours</h2>
+    <p>Each board is a single HTML file. A few numbers near the top of its script change how it behaves:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Board</th><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>Train</td><td><code>STAY_SECONDS</code></td><td>25</td><td>Seconds a train stays (flashing 1) after its scheduled time</td></tr>
+          <tr><td>Train</td><td><code>FLASH_MS</code></td><td>650</td><td>Length of each flash step</td></tr>
+          <tr><td>Train</td><td><code>SCROLL_MS</code></td><td>800</td><td>Speed of the scrolling stop list (higher is slower)</td></tr>
+          <tr><td>Train</td><td><code>TIMER_OFFSET_SECONDS</code></td><td>0</td><td>Shifts every countdown; negative gives a leave-early buffer</td></tr>
+          <tr><td>Bus</td><td><code>MINUTES_UP_TO</code></td><td>30</td><td>Show minutes up to this, then clock times</td></tr>
+          <tr><td>Bus</td><td><code>ROWS</code></td><td>6</td><td>Number of departures shown</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:14px">Want to build on it? The source is on <a href="https://github.com/StephenFromAccounting/Perth-timetable-test-project" target="_blank" rel="noopener">GitHub</a>. Fork it, change it, share what you make.</p>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <p>Everything happens on your device. The page opens the official public timetable (a GTFS file), reads its 75 MB of stop times line by line, and keeps only what it needs: train trips for the train board, one stop's departures for the bus board. Service days, public holidays and published closures come from the timetable's own calendar. There's no server and no tracking, and nothing is sent anywhere.</p>
+  </section>
+
+  <section>
+    <h2>The fine print</h2>
+    <p>Times are <b>scheduled</b>, not live. There's no public real-time feed, so delays and replacement-bus notices aren't shown. Check official sources before you travel.</p>
+    <p class="fine">Timetable data is available free of charge from <a href="https://www.transperth.wa.gov.au" target="_blank" rel="noopener">www.transperth.wa.gov.au</a>, used under its <a href="https://www.transperth.wa.gov.au/About/Spatial-Data-Access" target="_blank" rel="noopener">licence agreement</a>. This is an independent, non-commercial project and is not endorsed by the data provider. It doesn't use any live data from the provider's website. Code is MIT licensed.</p>
+  </section>
+
+  <footer>
+    Made for fun in Perth. Free to use, free to share.
+    &nbsp;&nbsp;<a href="https://github.com/StephenFromAccounting/Perth-timetable-test-project" target="_blank" rel="noopener">Source on GitHub</a>
+  </footer>
+
 </main>
 </body>
 </html>
