@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bus stop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --wall:#9ea3a6; --frame:#c9cdcf; --paper:#dcdfd9; --ink:#1f2421; --soft:#5b615d; --line:#b5b9b3; --clock:#2a2f2c;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%}
+body{margin:0;height:100%;background:var(--wall);color:var(--ink);
+  font-family:"Source Sans 3","Segoe UI",Roboto,Arial,sans-serif;
+  display:flex;flex-direction:column;gap:10px;padding:10px 12px}
+
+/* controls */
+.bar-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
+.tb{font:inherit;font-size:15px;font-weight:600;background:var(--clock);color:#f1f2ee;border:0;border-radius:4px;padding:7px 12px;cursor:pointer;display:inline-block}
+.code{font:inherit;font-size:16px;width:7.5em;padding:6px 8px;border-radius:4px;border:1px solid #6d726e;background:#f1f2ee;color:var(--ink)}
+.tb:focus-visible,.code:focus-visible{outline:3px solid #0b5fff;outline-offset:2px}
+.msg{font-size:13px;width:100%;text-align:center;color:#222}
+.hidden{display:none}
+a.tb{text-decoration:none}
+body.ui-hidden .bar-top{display:none}
+
+/* the e-paper sign */
+.wrap{flex:1;min-height:0;display:flex;justify-content:center;font-size:var(--fs,16px);transition:font-size .25s ease}
+.wrap.measuring{transition:none}
+@media (prefers-reduced-motion:reduce){.wrap{transition:none}}
+.frame{background:var(--frame);border-radius:.6em;padding:.8em;box-shadow:0 10px 30px rgba(0,0,0,.25),inset 0 0 0 2px rgba(255,255,255,.35);
+  width:100%;max-width:60em;display:flex}
+.paper{flex:1;min-width:0;background:var(--paper);border-radius:.25em;padding:.9em 1.1em;display:flex;flex-direction:column;overflow:hidden}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:1em}
+.note{font-size:.85em;color:var(--soft)}
+.clock{background:var(--clock);color:#f1f2ee;border-radius:.2em;padding:.15em .5em .25em;text-align:right;line-height:1.05}
+.clock small{display:block;font-size:.55em;opacity:.8}
+.clock b{font-size:1.5em;font-weight:600}
+.cols,.dep{display:grid;grid-template-columns:var(--rw,4.6em) 1fr 6.2em;align-items:center;gap:.6em}
+.cols{font-size:.8em;color:var(--soft);margin:.5em 0 .2em}
+.cols span:last-child,.when{text-align:right}
+.dep{border-top:1px solid var(--line);padding:.35em 0}
+.route{font-size:2.4em;font-weight:700;line-height:1;letter-spacing:-.01em;white-space:nowrap}
+.route.long{font-size:1.25em;white-space:normal}
+.dest{font-size:1.1em;line-height:1.15;overflow-wrap:anywhere}
+.when{font-size:2.2em;font-weight:600;line-height:1;white-space:nowrap}
+.when small{font-size:.38em;font-weight:400;margin-left:.15em}
+.when.sched{font-size:1.25em}
+.when.sched small{display:block;font-size:.6em;margin:0;color:var(--soft)}
+.foot{margin-top:auto;padding-top:.6em;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:1em;font-size:.95em}
+.foot b{font-weight:700}
+.empty{font-size:1.3em;padding:1.5em 0;color:var(--soft)}
+</style>
+</head>
+<body>
+
+<div class="bar-top" id="toolbar">
+  <label for="code" class="msg" style="width:auto">Stop number</label>
+  <input id="code" class="code" inputmode="numeric" autocomplete="off" placeholder="e.g. 12808">
+  <button class="tb" id="go">Show stop</button>
+  <label class="tb" for="file">Import</label>
+  <input id="file" type="file" accept=".zip,application/zip,application/x-zip-compressed" class="hidden">
+  <button class="tb" id="fs">Full screen</button>
+  <button class="tb" id="hide">Hide settings</button>
+  <a class="tb" id="dl" href="https://www.transperth.wa.gov.au/TimetablePDFs/GoogleTransit/Production/google_transit.zip" target="_blank" rel="noopener" download>Download timetable</a>
+  <div class="msg" id="msg">Looking for the timetable…</div>
+  <div class="msg">Timetable data is available free of charge from <a href="https://www.transperth.wa.gov.au" target="_blank" rel="noopener" style="color:inherit">www.transperth.wa.gov.au</a>.</div>
+</div>
+
+<div class="wrap" id="wrap"><div class="frame"><div class="paper" id="paper"></div></div></div>
+
+<script>
+// Departures show as minutes up to this many minutes away, then as a clock time.
+const MINUTES_UP_TO = 30;
+// A bus stays on the list (showing "Now") until this many seconds after its scheduled time.
+const STAY_SECONDS = 30;
+const ROWS = 6;
+const STOP_KEY = "bb-stop-v1";
+const DAYS = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+let STOP = null;   // departures for the current stop (localStorage)
+let ZIP = null;    // opened timetable, kept for quick stop changes
+try { STOP = JSON.parse(localStorage.getItem(STOP_KEY) || "null"); } catch(e) {}
+if (STOP) $("code").value = STOP.code;
+
+/* ---------- storage for the zip, so changing stop doesn't need Import again ---------- */
+function idb(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("bus-board", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(k){ const db = await idb(); return new Promise((res, rej) => { const q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+async function idbSet(k, v){ const db = await idb(); return new Promise((res, rej) => { const t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+
+/* ---------- timetable maths (device clock) ---------- */
+function ymd(d){ return d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate(); }
+function fmt(s){ s = ((s % 86400) + 86400) % 86400; return String(Math.floor(s/3600)).padStart(2,"0") + ":" + String(Math.floor(s%3600/60)).padStart(2,"0"); }
+function runs(svc, date, wd){
+  const ex = STOP.ex[svc + "|" + date];
+  if (ex === 1) return true;
+  if (ex === 2) return false;
+  const c = STOP.cal[svc];
+  return !!(c && date >= c.s && date <= c.e && c.d[wd]);
+}
+function upcoming(){
+  const now = new Date(), t = now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds() + now.getMilliseconds()/1000, out = [];
+  for (const off of [-1, 0, 1]){
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off), date = ymd(d), wd = d.getDay();
+    for (const dep of STOP.deps){
+      if (!runs(dep.v, date, wd)) continue;
+      const rel = dep.s + off*86400 - t;
+      if (rel >= -STAY_SECONDS) out.push({ ...dep, rel });
+    }
+  }
+  return out.sort((a,b) => a.rel - b.rel).slice(0, ROWS);
+}
+
+/* ---------- render ---------- */
+let lastSig = "", fitTimer = null;
+function render(){
+  const now = new Date();
+  const clock = String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
+  let rows;
+  if (!STOP) rows = '<div class="empty">Import the timetable, then enter a stop number.</div>';
+  else {
+    const list = upcoming();
+    // route column as wide as the longest route number on screen (e.g. "360X"), same for every row
+    const longest = Math.max(3, ...list.map(x => STOP.routes[x.r].length <= 5 ? STOP.routes[x.r].length : 0));
+    $("paper").style.setProperty("--rw", (longest * 0.58 * 2.4 + 0.4).toFixed(2) + "em");
+    rows = list.length ? list.map(x => {
+      const route = STOP.routes[x.r], long = route.length > 5;   // names like "Blue CAT" use smaller text
+      let when;
+      if (x.rel < 60) when = '<div class="when">Now</div>';
+      else if (x.rel <= MINUTES_UP_TO*60){ const m = Math.ceil(x.rel/60); when = '<div class="when">' + m + '<small>' + (m === 1 ? "min" : "mins") + '</small></div>'; }
+      else when = '<div class="when sched"><small>Departs</small>' + fmt(x.s) + '</div>';
+      return '<div class="dep"><div class="route' + (long ? ' long' : '') + '">' + esc(route) + '</div><div class="dest">' + esc(STOP.heads[x.h]) + '</div>' + when + '</div>';
+    }).join("") : '<div class="empty">No more departures from this stop today.</div>';
+  }
+  $("paper").innerHTML =
+    '<div class="head"><div class="note">All times are scheduled</div><div class="clock"><small>Time now</small><b>' + clock + '</b></div></div>' +
+    '<div class="cols"><span>Route</span><span>Destination</span><span>Departs</span></div>' + rows +
+    '<div class="foot"><span>' + (STOP ? esc(STOP.name) : "") + '</span><span>' + (STOP ? 'Stop <b>' + esc(STOP.code) + '</b>' : "") + '</span></div>';
+  const sig = $("paper").textContent.replace(/\d/g, "0");
+  if (sig !== lastSig){ lastSig = sig; fitSoon(); }
+}
+
+/* ---------- fit: largest text that still fits the screen ---------- */
+function fits(){ const p = $("paper"); return p.scrollHeight <= p.clientHeight + 1 && p.scrollWidth <= p.clientWidth + 1; }
+function fit(){
+  const w = $("wrap"), old = w.style.getPropertyValue("--fs") || "16px";
+  w.classList.add("measuring");
+  let lo = 6, hi = 80;
+  for (let k = 0; k < 12; k++){ const mid = (lo + hi) / 2; w.style.setProperty("--fs", mid + "px"); if (fits()) lo = mid; else hi = mid; }
+  const target = Math.floor(lo * 10) / 10 + "px";
+  w.style.setProperty("--fs", old); void w.offsetHeight;
+  w.classList.remove("measuring");
+  w.style.setProperty("--fs", target);
+}
+function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(fit, 30); }
+window.addEventListener("resize", fitSoon);
+
+/* ---------- GTFS ---------- */
+function splitCSV(line){
+  const out = []; let cur = "", q = false;
+  for (let i = 0; i < line.length; i++){
+    const c = line[i];
+    if (q){ if (c === '"'){ if (line[i+1] === '"'){ cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ","){ out.push(cur.trim()); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur.trim()); return out;
+}
+async function readSmall(zip, name){
+  const f = zip.file(name); if (!f) return [];
+  const lines = (await f.async("string")).replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
+  const head = splitCSV(lines[0]);
+  return lines.slice(1).map(l => { const v = splitCSV(l), o = {}; head.forEach((h,i) => o[h] = v[i]); return o; });
+}
+function streamLines(zip, name, onRow, onProgress){
+  return new Promise((resolve, reject) => {
+    const f = zip.file(name); if (!f) return reject(new Error(name + " missing from zip"));
+    let buf = "", head = null, n = 0;
+    f.internalStream("string")
+      .on("data", (chunk, meta) => {
+        buf += chunk; let i;
+        while ((i = buf.indexOf("\n")) >= 0){
+          const line = buf.slice(0, i).replace(/\r$/, ""); buf = buf.slice(i+1);
+          if (!line) continue;
+          if (!head){ head = splitCSV(line.replace(/^\uFEFF/, "")); continue; }
+          onRow(line, head);
+          if (++n % 200000 === 0) onProgress(meta.percent);
+        }
+      })
+      .on("error", reject)
+      .on("end", () => { if (buf && head) onRow(buf, head); resolve(); })
+      .resume();
+  });
+}
+const toSecs = t => { const [h,m,s] = t.split(":").map(Number); return h*3600 + m*60 + (s||0); };
+const tidyHead = h => h.replace(/\bStn\b/g, "Station").replace(/\bBus Stn\b/g, "Bus Station");
+
+async function openZip(){
+  if (ZIP) return ZIP;
+  const blob = await idbGet("zip").catch(() => null);
+  if (!blob) throw new Error("import the timetable first");
+  return (ZIP = await JSZip.loadAsync(blob));
+}
+
+async function scanStop(code){
+  const msg = t => $("msg").textContent = t;
+  code = String(code).trim();
+  if (!/^\d+$/.test(code)){ msg("Enter the stop number (digits only)."); return; }
+  try{
+    msg("Opening timetable…");
+    const zip = await openZip();
+    const stops = await readSmall(zip, "stops.txt");
+    const stop = stops.find(s => s.stop_code === code) || stops.find(s => s.stop_id === code);
+    if (!stop){ msg("Stop " + code + " isn't in this timetable. Check the number on the sign."); return; }
+    msg("Reading routes…");
+    const routeName = {};
+    (await readSmall(zip, "routes.txt")).forEach(r => routeName[r.route_id] = r.route_short_name || r.route_long_name || r.route_id);
+    const trip = {};
+    (await readSmall(zip, "trips.txt")).forEach(t => trip[t.trip_id] = { v: t.service_id, r: routeName[t.route_id] || "", h: tidyHead(t.trip_headsign || "") });
+
+    msg("Finding departures for stop " + code + " (big file, hang on)…");
+    const here = {}, maxSeq = {};
+    let iT, iD, iS, iQ, iP;
+    await streamLines(zip, "stop_times.txt", (line, head) => {
+      if (iT === undefined){ iT = head.indexOf("trip_id"); iD = head.indexOf("departure_time"); iS = head.indexOf("stop_id"); iQ = head.indexOf("stop_sequence"); iP = head.indexOf("pickup_type"); }
+      const v = splitCSV(line), q = +v[iQ];
+      if (!(maxSeq[v[iT]] >= q)) maxSeq[v[iT]] = q;
+      if (v[iS] === stop.stop_id && v[iP] !== "1") here[v[iT]] = { s: toSecs(v[iD] || "0:0:0"), q };
+    }, p => msg("Finding departures for stop " + code + "… " + Math.round(p) + "%"));
+
+    const routes = [], rIx = {}, heads = [], hIx = {}, deps = [], used = new Set();
+    const intern = (arr, ix, k) => (k in ix) ? ix[k] : (ix[k] = arr.push(k) - 1);
+    for (const id in here){
+      if (here[id].q >= maxSeq[id] || !trip[id]) continue;     // the bus ends here, so it doesn't depart
+      const t = trip[id]; used.add(t.v);
+      deps.push({ s: here[id].s, v: t.v, r: intern(routes, rIx, t.r), h: intern(heads, hIx, t.h) });
+    }
+    const cal = {};
+    (await readSmall(zip, "calendar.txt")).forEach(c => { if (used.has(c.service_id)) cal[c.service_id] = { s: +c.start_date, e: +c.end_date, d: DAYS.map(d => c[d] === "1") }; });
+    const ex = {};
+    (await readSmall(zip, "calendar_dates.txt")).forEach(c => { if (used.has(c.service_id)) ex[c.service_id + "|" + c.date] = +c.exception_type; });
+
+    STOP = { code: stop.stop_code || code, name: stop.stop_name, deps, routes, heads, cal, ex };
+    try { localStorage.setItem(STOP_KEY, JSON.stringify(STOP)); } catch(e) {}
+    msg(stop.stop_name + ": " + deps.length + " departures in this timetable. Scheduled times, not live.");
+    render();
+  } catch(err){
+    msg("Couldn't load the stop: " + err.message + ".");
+  }
+}
+
+/* ---------- controls ---------- */
+$("go").addEventListener("click", () => scanStop($("code").value));
+$("code").addEventListener("keydown", e => { if (e.key === "Enter") scanStop($("code").value); });
+async function importBlob(f, name){
+  const msg = t => $("msg").textContent = t;
+  msg("Importing " + name + " (" + Math.round(f.size / 1048576) + " MB)…");
+  ZIP = null;
+  try { ZIP = await JSZip.loadAsync(f); }
+  catch(err){ msg("Couldn't open " + name + ": " + (err.message || err) + ". Pick the google_transit.zip timetable."); return false; }
+  if (!ZIP.file("stop_times.txt")){ ZIP = null; msg(name + " isn't a GTFS timetable (no stop_times.txt inside)."); return false; }
+  // keep a copy on the device so changing stop later doesn't need Import again
+  let saved = true;
+  try { await idbSet("zip", new Blob([await f.arrayBuffer()], { type: "application/zip" })); } catch(err) { saved = false; }
+  const code = $("code").value.trim() || (STOP && STOP.code) || "";
+  const note = "Timetable loaded" + (saved ? " and saved." : " (couldn't save it on this device, so you'll need Import again next time).");
+  if (code) { msg(note); scanStop(code); }
+  else { msg(note + " Now enter a stop number and tap Show stop."); $("code").focus(); }
+  return true;
+}
+$("file").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  await importBlob(f, f.name);
+  e.target.value = "";   // lets you pick the same file again
+});
+function setUI(show){ document.body.classList.toggle("ui-hidden", !show); fitSoon(); }
+$("hide").addEventListener("click", () => setUI(false));
+$("wrap").addEventListener("click", () => { if (document.body.classList.contains("ui-hidden")) setUI(true); });
+let wake = null;
+async function keepAwake(){ try { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => wake = null); } catch(e) {} }
+$("fs").addEventListener("click", async () => {
+  try{
+    if (!document.fullscreenElement){ await document.documentElement.requestFullscreen({ navigationUI: "hide" }); await keepAwake(); setUI(false); }
+    else await document.exitFullscreen();
+  } catch(e) { $("msg").textContent = "Full screen isn't available in this browser."; }
+});
+document.addEventListener("fullscreenchange", () => {
+  $("fs").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+  if (!document.fullscreenElement){ setUI(true); if (wake){ wake.release().catch(()=>{}); wake = null; } }
+  fitSoon();
+});
+
+
+/* ---------- auto-load: look for the timetable next to this page before asking for Import ----------
+   Checked in order: ./google_transit.zip, then ./gtfs/google_transit.zip.
+   If the file there changes (new timetable uploaded), it's loaded again automatically. */
+const LOCAL_ZIPS = ["google_transit.zip", "gtfs/google_transit.zip"];
+async function findLocalZip(){
+  for (const path of LOCAL_ZIPS){
+    try{
+      let r = await fetch(path, { method: "HEAD", cache: "no-cache" });
+      if (r.status === 405 || r.status === 501) r = await fetch(path, { cache: "no-cache" });   // server without HEAD
+      if (!r.ok) continue;
+      const sig = path + "|" + (r.headers.get("etag") || r.headers.get("last-modified") || r.headers.get("content-length") || "");
+      return { path, sig };
+    } catch(e) { /* opened from a file or offline: no local copy reachable */ }
+  }
+  return null;
+}
+async function fetchLocalZip(found){
+  const r = await fetch(found.path, { cache: "no-cache" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.blob();
+}
+const NOT_FOUND = "No timetable found next to this page. Tap Download timetable, then Import.";
+
+/* ---------- start: tick on each second of the device clock ---------- */
+$("msg").textContent = STOP ? STOP.name + " (stop " + STOP.code + "). Scheduled times, not live." : "Looking for the timetable…";
+render();
+(async () => {
+  const found = await findLocalZip();
+  const have = await idbGet("zip").catch(() => null);
+  let lastSig = null; try { lastSig = localStorage.getItem("bb-src-sig"); } catch(e) {}
+  if (found && (found.sig !== lastSig || !have)){
+    $("msg").textContent = "Found " + found.path + " next to this page. Loading…";
+    try {
+      const ok = await importBlob(await fetchLocalZip(found), found.path);
+      if (ok) try { localStorage.setItem("bb-src-sig", found.sig); } catch(e) {}
+    } catch(e) { $("msg").textContent = "Couldn't read " + found.path + ". Tap Import instead."; }
+  } else if (!have && !STOP) $("msg").textContent = NOT_FOUND;
+})();
+function tick(){ render(); setTimeout(tick, 1000 - (Date.now() % 1000) + 5); }
+setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
+document.addEventListener("visibilitychange", async () => { if (document.hidden) return; render(); if (document.fullscreenElement && !wake) await keepAwake(); });
+</script>
+</body>
+</html>

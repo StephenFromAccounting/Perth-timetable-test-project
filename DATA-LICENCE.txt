@@ -1,0 +1,25 @@
+TIMETABLE DATA
+
+Timetable data is available free of charge from www.transperth.wa.gov.au
+
+Download (GTFS, about 26 MB):
+https://www.transperth.wa.gov.au/TimetablePDFs/GoogleTransit/Production/google_transit.zip
+
+Licence agreement (read the full, current terms here):
+https://www.transperth.wa.gov.au/About/Spatial-Data-Access
+
+Summary of the licence terms as published on that page (October 2026):
+- The data may be used, reproduced and redistributed under a non-exclusive,
+  limited and revocable licence.
+- If the data is given to another person or incorporated into another product,
+  it must be stated that the data is available free of charge from
+  www.transperth.wa.gov.au (see the first line of this file).
+- The data provider's trademarks and copyrighted materials, and confusingly
+  similar variants, may not be used in association with the data.
+- The data is provided "as is" and "as available", with no warranty.
+- The data provider may change or stop providing the data at any time and
+  keeps all title and ownership of the data.
+
+This project is independent and is not endorsed by the data provider.
+It does not use any live data from the provider's website.
+This summary is not legal advice; the terms at the link above apply.

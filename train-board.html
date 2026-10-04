@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Train board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --wall:#1e2024; --housing:#161616; --face:#000; --led:#f2f2f2; --dim:#4a4a4a; --shadow:#3a3a3a;
+  --flash:#ffa31a; --yellow:#ffe234; --ink:#d9d4cb; --panel:#1b1c1f;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%}
+body{margin:0;height:100%;background:var(--wall);color:var(--ink);
+  font-family:"Minecraftia","Pixelify Sans","Courier New",monospace;
+  display:flex;flex-direction:column;gap:1.2vw;padding:10px 12px}
+
+/* toolbar */
+.bar-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
+.tb{font:inherit;font-size:14px;background:var(--led);color:#111;border:0;border-radius:4px;padding:7px 12px;cursor:pointer;display:inline-block}
+.tb.wide{background:#0f0f10;color:var(--ink);border:1px solid #444}
+.tb:focus-visible,.st:focus-visible,.x:focus-visible,summary:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+.msg{font-size:12px;opacity:.75;width:100%;text-align:center}
+.hidden{display:none}
+a.tb{text-decoration:none}
+body.ui-hidden .bar-top{display:none}
+
+/* station picker */
+.picker{position:fixed;inset:0;z-index:50;background:var(--panel);overflow-y:auto;
+  padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 24px)}
+.phead{display:flex;justify-content:space-between;align-items:center;max-width:720px;margin:0 auto 10px}
+.phead h2{margin:0;font-size:20px;color:var(--led)}
+.x{background:none;border:0;color:var(--ink);font:inherit;font-size:30px;line-height:1;cursor:pointer;padding:4px 10px}
+.sections{max-width:720px;margin:0 auto}
+details{border-top:2px dashed #3a3a3a}
+summary{cursor:pointer;padding:14px 4px;font-size:17px;color:var(--led);list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"+ ";color:var(--flash)}
+details[open] summary::before{content:"- "}
+.stations{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;padding:0 0 14px}
+.st{font:inherit;font-size:15px;text-align:left;padding:9px 10px;border-radius:4px;border:1px solid #444;background:#0f0f10;color:var(--ink);cursor:pointer}
+.st[aria-current="true"]{background:var(--led);color:#111;border-color:var(--led)}
+
+/* signs */
+.boards{flex:1;display:grid;grid-template-columns:repeat(var(--cols,2),1fr);grid-template-rows:1fr;gap:1.4vw;min-height:0;
+  font-size:var(--fs,16px);transition:font-size .25s ease}
+.boards.measuring{transition:none}
+@media (prefers-reduced-motion:reduce){.boards{transition:none}}
+.housing{background:var(--housing);border-radius:.6vw;padding:1vw;box-shadow:inset 0 0 0 2px rgba(255,255,255,.06),0 10px 24px rgba(0,0,0,.45);min-width:0;min-height:0;display:flex}
+.face{background:var(--face);padding:1.2vw 1.4vw;color:var(--led);text-shadow:.12em .12em 0 var(--shadow);flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.plat{background:var(--led);color:var(--face);text-shadow:none;padding:.4vw .7vw;font-size:1.05em;margin-bottom:.4em}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:1vw}
+.row > :first-child{flex:1;min-width:0;overflow-wrap:anywhere}
+.row > :last-child{flex:none;text-align:right}
+.dest{font-size:2.3em;line-height:1.1;font-weight:600}
+.mins{font-size:3em;font-weight:600;line-height:1}
+.mins small{font-size:.32em;margin-left:.25em;font-weight:400}
+.stops{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:.8vw;font-size:1.15em;line-height:1.5;margin-top:.4em}
+/* stops scroll across in one repeating line */
+.mq{overflow:hidden;white-space:nowrap;min-width:0}
+.mqi{display:inline-flex;will-change:transform}
+.mqi span{padding-right:3em}
+.reduced .mq{text-overflow:ellipsis}
+.thenrow + .thenrow{margin-top:.2em}
+.lbl{opacity:.75;font-size:.85em}
+.rule{height:.25vw;min-height:2px;margin:.8vw 0;background:repeating-linear-gradient(90deg,var(--dim) 0 .5vw,transparent .5vw .8vw)}
+.then{font-size:1.25em}
+.foot{font-size:1em}
+.bottom{margin-top:auto}
+.empty{font-size:1.5em;padding:1em 0}
+.empty + .bottom{margin-top:auto}
+/* arriving (on 1): number flashes white/yellow, name flashes orange */
+.arriving.off .mins{color:var(--flash)}
+.arriving.off .dest{color:var(--flash)}
+.reduced .arriving .mins{color:var(--flash)}
+.reduced .arriving .dest{color:var(--flash)}
+/* demo: the whole sign flashes orange */
+.demo.arriving.off{--led:var(--flash);--dim:#7a4a0a;--shadow:#3f2806}
+.reduced .demo.arriving{--led:var(--flash);--dim:#7a4a0a;--shadow:#3f2806}
+</style>
+</head>
+<body>
+
+<div class="bar-top" id="toolbar">
+  <button class="tb wide" id="pick">Pick station</button>
+  <label class="tb" for="file">Import</label>
+  <input id="file" type="file" accept=".zip" class="hidden">
+  <button class="tb" id="fs">Full screen</button>
+  <button class="tb" id="hide">Hide settings</button>
+  <button class="tb" id="demo">Demo</button>
+  <a class="tb" id="dl" href="https://www.transperth.wa.gov.au/TimetablePDFs/GoogleTransit/Production/google_transit.zip" target="_blank" rel="noopener" download>Download timetable</a>
+  <div class="msg" id="msg">Looking for the timetable…</div>
+  <div class="msg">Timetable data is available free of charge from <a href="https://www.transperth.wa.gov.au" target="_blank" rel="noopener" style="color:inherit">www.transperth.wa.gov.au</a>.</div>
+</div>
+
+<div class="picker hidden" id="picker" role="dialog" aria-modal="true" aria-label="Pick a station">
+  <div class="phead"><h2>Pick a station</h2><button class="x" id="closePick" aria-label="Close">&times;</button></div>
+  <div class="sections" id="sections"></div>
+</div>
+
+<div class="boards" id="boards"></div>
+
+<script>
+const TIMER_OFFSET_SECONDS = 0;
+// Each sign lists 3 services: the next train big, then the next two under Then.
+// Minutes round UP like the platform boards: under 1 min shows 1, never 0.
+// The train stays on the sign (flashing 1) until STAY_SECONDS after its scheduled time, then the next train moves up.
+const STAY_SECONDS = 25;
+// Arriving flash: each on/off step lasts this long (ms).
+const FLASH_MS = 650;
+const ALL = "All stations A-Z";
+const SEL_KEY = "tb-sel-v1", SNAP_KEY = "tb-snap-v1";
+const DAYS = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+let SEL = { line: ALL, station: "Beckenham" };
+let NET = null;    // whole rail network (IndexedDB)
+let SNAP = null;   // the selected station's departures (localStorage), so the board works even without the network
+try { const s = JSON.parse(localStorage.getItem(SEL_KEY) || "null"); if (s && s.station) SEL = s; } catch(e) {}
+try { SNAP = JSON.parse(localStorage.getItem(SNAP_KEY) || "null"); } catch(e) {}
+const saveSel = () => { try { localStorage.setItem(SEL_KEY, JSON.stringify(SEL)); } catch(e) {} };
+const saveSnap = () => { try { localStorage.setItem(SNAP_KEY, JSON.stringify(SNAP)); } catch(e) {} };
+function idb(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("train-board", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(k){ const db = await idb(); return new Promise((res, rej) => { const q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+async function idbSet(k, v){ const db = await idb(); return new Promise((res, rej) => { const t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+
+/* ---------- build the selected station ---------- */
+function buildSelection(){
+  if (!NET) return;
+  const dests = [], dIx = {}, pats = [], pIx = {}, deps = [], count = {};
+  const intern = (arr, ix, k) => (k in ix) ? ix[k] : (ix[k] = arr.push(k) - 1);
+  for (const tr of NET.trips){
+    // every line through the station is included, so interlocking lines (e.g. Byford then Cockburn Central) share one sign
+    const st = tr.st;
+    for (let i = 0; i < st.length - 1; i++){
+      if (NET.names[st[i][0]] !== SEL.station) continue;
+      const later = [];
+      for (let j = i + 1; j < st.length; j++){ const n = NET.names[st[j][0]]; if (later[later.length-1] !== n) later.push(n); }
+      deps.push({ s: st[i][2], p: st[i][1], v: tr.v, l: tr.l, d: intern(dests, dIx, later[later.length-1]), x: intern(pats, pIx, later.join(", ")) });
+      count[st[i][1]] = (count[st[i][1]] || 0) + 1;
+      break;
+    }
+  }
+  // two busiest platforms become the two signs, in platform order
+  const plats = Object.keys(count).sort((a,b) => count[b] - count[a]).slice(0, 2)
+    .sort((a,b) => a.localeCompare(b, undefined, { numeric: true }));
+  SNAP = { sel: { ...SEL }, deps, dests, pats, plats, lines: NET.lines, cal: NET.cal, ex: NET.ex, loaded: NET.loaded };
+  saveSnap();
+}
+
+/* ---------- timetable maths (device clock) ---------- */
+function ymd(d){ return d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate(); }
+function fmt(s){ s = ((s % 86400) + 86400) % 86400; return String(Math.floor(s/3600)).padStart(2,"0") + ":" + String(Math.floor(s%3600/60)).padStart(2,"0"); }
+function runs(svc, date, wd){
+  const ex = SNAP.ex[svc + "|" + date];
+  if (ex === 1) return true;
+  if (ex === 2) return false;
+  const c = SNAP.cal[svc];
+  return !!(c && date >= c.s && date <= c.e && c.d[wd]);
+}
+function upcoming(plat, D){
+  if (D.demo){
+    return D.deps.filter(d => d.p === plat).map(d => ({ ...d, rel: (d.t - Date.now())/1000 }))
+      .filter(d => d.rel >= -STAY_SECONDS).sort((a,b) => a.rel - b.rel).slice(0, 3);
+  }
+  const now = new Date(), t = now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds() + now.getMilliseconds()/1000, out = [];
+  for (const off of [-1, 0, 1]){
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off), date = ymd(d), wd = d.getDay();
+    for (const dep of SNAP.deps){
+      if (dep.p !== plat || !runs(dep.v, date, wd)) continue;
+      const rel = dep.s + off*86400 - t + TIMER_OFFSET_SECONDS;
+      if (rel >= -STAY_SECONDS) out.push({ ...dep, rel });
+    }
+  }
+  return out.sort((a,b) => a.rel - b.rel).slice(0, 3);
+}
+
+/* ---------- flash timing (lined up to the clock so re-drawing never restarts it) ---------- */
+const REDUCED = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+if (REDUCED) document.documentElement.classList.add("reduced");
+const flashOff = () => !REDUCED && Math.floor(Date.now() / FLASH_MS) % 2 === 1;
+function flashTick(){
+  document.querySelectorAll(".face.arriving").forEach(f => f.classList.toggle("off", flashOff()));
+  setTimeout(flashTick, FLASH_MS - (Date.now() % FLASH_MS) + 2);
+}
+flashTick();
+
+/* ---------- scrolling stop list: position comes from the clock, so redrawing never makes it jump ---------- */
+const SCROLL_MS = 800;      // time to move one character width; bigger = slower
+const CHAR_EM = 0.6;        // roughly one character in this font
+function mqTick(){
+  if (!REDUCED) document.querySelectorAll(".mqi").forEach(el => {
+    const w = el.firstElementChild.offsetWidth; if (!w) return;
+    const pxPerMs = CHAR_EM * parseFloat(getComputedStyle(el).fontSize) / SCROLL_MS;
+    el.style.transform = "translateX(" + (-((Date.now() * pxPerMs) % w)) + "px)";
+  });
+  requestAnimationFrame(mqTick);
+}
+requestAnimationFrame(mqTick);
+
+/* ---------- render ---------- */
+let lastSig = "", fitTimer = null;
+function render(){
+  const now = new Date(), h = now.getHours();
+  const clock = ((h % 12) || 12) + ":" + String(now.getMinutes()).padStart(2,"0") + (h < 12 ? " am" : " pm");
+  const D = DEMO || SNAP;
+  const station = D ? D.sel.station : SEL.station;
+  const bottom = '<div class="bottom"><div class="rule"></div><div class="row foot"><span>' + esc(station) + '</span><span>' + clock + '</span></div></div>';
+  const empty = t => '<div class="housing"><div class="face"><div class="empty">' + t + '</div>' + bottom + '</div></div>';
+  let html;
+  if (!D) html = empty("Tap Import to load the timetable");
+  else if (!D.plats.length) html = empty("No trains at " + esc(station));
+  else html = D.plats.map(p => {
+    const [a, ...more] = upcoming(p, D), mins = x => Math.max(1, Math.ceil(x.rel/60));
+    if (!a) return empty((p ? "Platform " + esc(p) + ": " : "") + "no more trains today");
+    return '<div class="housing"><div class="face' + (D.demo ? ' demo' : '') + (mins(a) === 1 ? ' arriving' + (flashOff() ? ' off' : '') : '') + '">' +
+      '<div class="plat">' + (p ? 'Platform ' + esc(p) : esc(station)) + '&ensp;' + esc(D.lines[a.l] || "") + '</div>' +
+      '<div class="row"><span class="dest">' + esc(D.dests[a.d]) + '</span><span class="mins">' + mins(a) + '<small>min</small></span></div>' +
+      '<div class="bottom">' +
+      '<div class="stops"><span class="lbl">Stops at:</span><div class="mq"><div class="mqi"><span>' + esc(D.pats[a.x]) + '</span><span aria-hidden="true">' + esc(D.pats[a.x]) + '</span></div></div></div>' +
+      '<div class="rule"></div>' +
+      (more.length ? '<div class="lbl">Then:</div>' + more.map(b => '<div class="row then thenrow"><span>' + esc(D.dests[b.d]) + ' ' + fmt(b.s) + '</span><span>' + (mins(b) > 99 ? '' : mins(b) + ' min') + '</span></div>').join('') + '<div class="rule"></div>' : '') +
+      '<div class="row foot"><span>' + esc(station) + '</span><span>' + clock + '</span></div></div>' +
+      '</div></div>';
+  }).join("");
+  $("boards").style.setProperty("--cols", D && D.plats.length === 1 ? 1 : (D && D.plats.length ? 2 : 1));
+  $("boards").innerHTML = html;
+  if (DEMO){ const left = Math.max(0, DEMO.end - Date.now()); $("demo").textContent = "Stop demo " + Math.floor(left/60000) + ":" + String(Math.floor(left/1000) % 60).padStart(2,"0"); if (!left) stopDemo(); }
+  const sig = [...document.querySelectorAll(".face")].map(f => f.textContent.replace(/\d/g, "0")).join("|");
+  if (sig !== lastSig){ lastSig = sig; fitSoon(); }
+}
+function updatePickLabel(){
+  const s = SNAP ? SNAP.sel : SEL;
+  $("pick").textContent = s.station + " (change station)";
+}
+
+/* ---------- fit: largest text where every sign still fits ---------- */
+function fits(){ return [...document.querySelectorAll(".face")].every(f => f.scrollHeight <= f.clientHeight + 1 && f.scrollWidth <= f.clientWidth + 1); }
+function fit(){
+  const b = $("boards"), old = b.style.getPropertyValue("--fs") || "16px";
+  b.classList.add("measuring");
+  let lo = 6, hi = 120;
+  for (let k = 0; k < 12; k++){ const mid = (lo + hi) / 2; b.style.setProperty("--fs", mid + "px"); if (fits()) lo = mid; else hi = mid; }
+  const target = Math.floor(lo * 10) / 10 + "px";
+  b.style.setProperty("--fs", old); void b.offsetHeight;
+  b.classList.remove("measuring");
+  b.style.setProperty("--fs", target);
+}
+function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(fit, 30); }
+window.addEventListener("resize", fitSoon);
+
+/* ---------- station picker: sections per line ---------- */
+function renderPicker(){
+  if (!NET){
+    $("sections").innerHTML = '<p class="msg" style="text-align:left">Import the timetable first' + (SNAP ? ', then you can change stations.' : '.') + '</p>';
+    return;
+  }
+  const cur = SNAP ? SNAP.sel : SEL;
+  const section = (line, stations) =>
+    '<details' + (cur.line === line ? ' open' : '') + '><summary>' + esc(line) + '</summary><div class="stations">' +
+    stations.map(n => '<button class="st" data-line="' + esc(line) + '" data-st="' + esc(n) + '"' +
+      (cur.station === n ? ' aria-current="true"' : '') + '>' + esc(n) + '</button>').join("") +
+    '</div></details>';
+  $("sections").innerHTML =
+    NET.lineOrder.map(l => section(l, NET.lineStations[l])).join("") +
+    section(ALL, NET.stations);
+}
+$("sections").addEventListener("click", e => {
+  const b = e.target.closest(".st"); if (!b) return;
+  SEL = { line: b.dataset.line, station: b.dataset.st }; saveSel();
+  buildSelection(); updatePickLabel(); closePicker(); render();
+});
+function openPicker(){ renderPicker(); $("picker").classList.remove("hidden"); $("closePick").focus(); }
+function closePicker(){ $("picker").classList.add("hidden"); $("pick").focus(); }
+$("pick").addEventListener("click", openPicker);
+$("closePick").addEventListener("click", closePicker);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("picker").classList.contains("hidden")) closePicker(); });
+
+/* ---------- demo: 5 minutes of trains between Perth and Cannington, no timetable needed ---------- */
+const DEMO_MINUTES = 5;
+let DEMO = null;
+function startDemo(){
+  const start = Date.now(), m0 = Math.ceil(start / 60000) * 60000;          // next whole minute
+  const secsOfDay = t => { const d = new Date(t); return d.getHours()*3600 + d.getMinutes()*60; };
+  const deps = [];
+  // Platform 1 to Perth at +1, +3, +5, +7 min; Platform 2 to Cannington at +2, +4, +6, +8 min
+  [1,3,5,7].forEach(k => deps.push({ p: "1", d: 0, x: 0, l: 0, t: m0 + k*60000 }));
+  [2,4,6,8].forEach(k => deps.push({ p: "2", d: 1, x: 1, l: 0, t: m0 + k*60000 }));
+  deps.forEach(d => d.s = secsOfDay(d.t));
+  DEMO = { demo: true, end: start + DEMO_MINUTES*60000, sel: { station: "Victoria Park" }, plats: ["1","2"], lines: ["Armadale Line"],
+           dests: ["Perth", "Cannington"],
+           pats: ["Burswood, Perth Stadium, Claisebrook, McIver, Perth", "Carlisle, Oats Street, Queens Park, Cannington"], deps };
+  render();
+}
+function stopDemo(){ DEMO = null; $("demo").textContent = "Demo"; render(); }
+$("demo").addEventListener("click", () => DEMO ? stopDemo() : startDemo());
+
+/* ---------- settings hide/show and full screen ---------- */
+function setUI(show){ document.body.classList.toggle("ui-hidden", !show); fitSoon(); }
+$("hide").addEventListener("click", () => setUI(false));
+$("boards").addEventListener("click", () => { if (document.body.classList.contains("ui-hidden")) setUI(true); });
+let wake = null;
+async function keepAwake(){ try { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => wake = null); } catch(e) {} }
+$("fs").addEventListener("click", async () => {
+  try{
+    if (!document.fullscreenElement){
+      await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      try { await screen.orientation.lock("landscape"); } catch(e) {}
+      await keepAwake();
+      setUI(false);
+    } else await document.exitFullscreen();
+  } catch(e) { $("msg").textContent = "Full screen isn't available in this browser."; }
+});
+document.addEventListener("fullscreenchange", () => {
+  $("fs").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+  if (!document.fullscreenElement){ setUI(true); if (wake){ wake.release().catch(()=>{}); wake = null; } }
+  fitSoon();
+});
+
+/* ---------- import (GTFS timetable) ---------- */
+function splitCSV(line){
+  const out = []; let cur = "", q = false;
+  for (let i = 0; i < line.length; i++){
+    const c = line[i];
+    if (q){ if (c === '"'){ if (line[i+1] === '"'){ cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ","){ out.push(cur.trim()); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur.trim()); return out;
+}
+async function readSmall(zip, name){
+  const f = zip.file(name); if (!f) return [];
+  const lines = (await f.async("string")).replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
+  const head = splitCSV(lines[0]);
+  return lines.slice(1).map(l => { const v = splitCSV(l), o = {}; head.forEach((h,i) => o[h] = v[i]); return o; });
+}
+function streamLines(zip, name, onRow, onProgress){
+  return new Promise((resolve, reject) => {
+    const f = zip.file(name); if (!f) return reject(new Error(name + " missing from zip"));
+    let buf = "", head = null, n = 0;
+    f.internalStream("string")
+      .on("data", (chunk, meta) => {
+        buf += chunk; let i;
+        while ((i = buf.indexOf("\n")) >= 0){
+          const line = buf.slice(0, i).replace(/\r$/, ""); buf = buf.slice(i+1);
+          if (!line) continue;
+          if (!head){ head = splitCSV(line.replace(/^\uFEFF/, "")); continue; }
+          onRow(line, head);
+          if (++n % 200000 === 0) onProgress(meta.percent);
+        }
+      })
+      .on("error", reject)
+      .on("end", () => { if (buf && head) onRow(buf, head); resolve(); })
+      .resume();
+  });
+}
+const toSecs = t => { const [h,m,s] = t.split(":").map(Number); return h*3600 + m*60 + (s||0); };
+
+async function loadZip(file){
+  const msg = t => $("msg").textContent = t;
+  try{
+    msg("Opening zip…");
+    const zip = await JSZip.loadAsync(file);
+    const stops = await readSmall(zip, "stops.txt");
+    const byId = {}; stops.forEach(s => byId[s.stop_id] = s);
+    const nameOf = id => { const s = byId[id] || {}, p = byId[s.parent_station];
+      return ((p || s).stop_name || "").replace(/\s*\bStn\b.*$/i, "").replace(/,?\s*Platform\s*\w+/i, "").trim()
+        .replace(/\bMc([a-z])/g, (m, c) => "Mc" + c.toUpperCase()); };   // "Mciver" -> "McIver"
+    const platOf = id => { const s = byId[id] || {}; return s.platform_code || (/platform\s*(\w+)/i.exec(s.stop_name || "") || [])[1] || ""; };
+
+    msg("Reading trips…");
+    const lines = [], lIx = {}, routeLine = {};
+    (await readSmall(zip, "routes.txt")).forEach(r => {
+      const t = +r.route_type; if (!(t === 2 || (t >= 100 && t < 200))) return;
+      if (/^TRA-/.test(r.agency_id || r.route_id)) return;   // skip regional (TRA) trains; the station boards don't list them
+      const n = r.route_long_name || r.route_short_name || r.route_id;
+      routeLine[r.route_id] = (n in lIx) ? lIx[n] : (lIx[n] = lines.push(n) - 1);
+    });
+    const info = {};
+    (await readSmall(zip, "trips.txt")).forEach(t => { if (t.route_id in routeLine) info[t.trip_id] = { v: t.service_id, l: routeLine[t.route_id] }; });
+    if (!Object.keys(info).length) throw new Error("no train routes found");
+
+    msg("Reading stop times (big file, hang on)…");
+    const rows = {};
+    let iT, iD, iS, iQ;
+    await streamLines(zip, "stop_times.txt", (line, head) => {
+      if (iT === undefined){ iT = head.indexOf("trip_id"); iD = head.indexOf("departure_time"); iS = head.indexOf("stop_id"); iQ = head.indexOf("stop_sequence"); }
+      const v = splitCSV(line);
+      if (!(v[iT] in info)) return;
+      (rows[v[iT]] = rows[v[iT]] || []).push([+v[iQ], v[iS], toSecs(v[iD] || "0:0:0")]);
+    }, p => msg("Reading stop times… " + Math.round(p) + "%"));
+
+    msg("Building lines and stations…");
+    const names = [], nIx = {}, trips = [], longest = {};
+    for (const id in rows){
+      const st = rows[id].sort((a,b) => a[0]-b[0]).map(([, sid, secs]) => {
+        const n = nameOf(sid); return [(n in nIx) ? nIx[n] : (nIx[n] = names.push(n) - 1), platOf(sid), secs];
+      }).filter(r => names[r[0]]);
+      const tr = { ...info[id], st }; trips.push(tr);
+      if (!longest[tr.l] || st.length > longest[tr.l].length) longest[tr.l] = st;
+    }
+    // stations along each line, in the order the longest trip visits them
+    const lineStations = {};
+    lines.forEach((ln, li) => {
+      const seen = new Set(), order = [];
+      (longest[li] || []).forEach(r => { const n = names[r[0]]; if (!seen.has(n)){ seen.add(n); order.push(n); } });
+      trips.forEach(tr => { if (tr.l === li) tr.st.forEach(r => { const n = names[r[0]]; if (!seen.has(n)){ seen.add(n); order.push(n); } }); });
+      lineStations[ln] = order;
+    });
+    const cal = {};
+    (await readSmall(zip, "calendar.txt")).forEach(c => cal[c.service_id] = { s: +c.start_date, e: +c.end_date, d: DAYS.map(d => c[d] === "1") });
+    const ex = {};
+    (await readSmall(zip, "calendar_dates.txt")).forEach(c => ex[c.service_id + "|" + c.date] = +c.exception_type);
+
+    NET = { names, lines, trips, cal, ex, lineStations, lineOrder: lines.slice().sort(),
+            stations: [...new Set(names)].filter(Boolean).sort(), loaded: new Date().toISOString().slice(0,10) };
+    if (!NET.stations.includes(SEL.station)) SEL = { line: ALL, station: NET.stations[0] };
+    saveSel(); buildSelection(); updatePickLabel();
+    let stored = true;
+    try { await idbSet("net", NET); } catch(e) { stored = false; }
+    msg(NET.stations.length + " stations on " + lines.length + " lines (" + NET.loaded + ")." +
+        (stored ? " Saved. Scheduled times, not live." : " Couldn't save the full network: changing station later needs Import again."));
+    render();
+    return true;
+  } catch(err){
+    msg("Couldn't import: " + err.message + ". Make sure it's the google_transit.zip timetable.");
+    return false;
+  }
+}
+$("file").addEventListener("change", e => e.target.files[0] && loadZip(e.target.files[0]));
+
+
+/* ---------- auto-load: look for the timetable next to this page before asking for Import ----------
+   Checked in order: ./google_transit.zip, then ./gtfs/google_transit.zip.
+   If the file there changes (new timetable uploaded), it's loaded again automatically. */
+const LOCAL_ZIPS = ["google_transit.zip", "gtfs/google_transit.zip"];
+async function findLocalZip(){
+  for (const path of LOCAL_ZIPS){
+    try{
+      let r = await fetch(path, { method: "HEAD", cache: "no-cache" });
+      if (r.status === 405 || r.status === 501) r = await fetch(path, { cache: "no-cache" });   // server without HEAD
+      if (!r.ok) continue;
+      const sig = path + "|" + (r.headers.get("etag") || r.headers.get("last-modified") || r.headers.get("content-length") || "");
+      return { path, sig };
+    } catch(e) { /* opened from a file or offline: no local copy reachable */ }
+  }
+  return null;
+}
+async function fetchLocalZip(found){
+  const r = await fetch(found.path, { cache: "no-cache" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.blob();
+}
+const NOT_FOUND = "No timetable found next to this page. Tap Download timetable, then Import.";
+
+/* ---------- start ---------- */
+updatePickLabel();
+$("msg").textContent = SNAP ? "Timetable saved (" + SNAP.loaded + "). Scheduled times, not live." : "Looking for the timetable…";
+render();
+(async () => {
+  try { const net = await idbGet("net"); if (net && net.trips) NET = net; } catch(e) {}
+  const found = await findLocalZip();
+  let lastSig = null; try { lastSig = localStorage.getItem("tb-src-sig"); } catch(e) {}
+  if (found && (found.sig !== lastSig || !SNAP || !NET)){
+    $("msg").textContent = "Found " + found.path + " next to this page. Loading…";
+    try {
+      const ok = await loadZip(await fetchLocalZip(found));
+      if (ok) try { localStorage.setItem("tb-src-sig", found.sig); } catch(e) {}
+    } catch(e) { $("msg").textContent = "Couldn't read " + found.path + ". Tap Import instead."; }
+  } else if (!SNAP) $("msg").textContent = NOT_FOUND;
+})();
+function tick(){ render(); setTimeout(tick, 1000 - (Date.now() % 1000) + 5); }
+setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) return;
+  render();
+  if (document.fullscreenElement && !wake) await keepAwake();
+});
+</script>
+</body>
+</html>
